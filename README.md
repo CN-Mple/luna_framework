@@ -65,11 +65,26 @@ static int led_state(struct core_fsm *me, const struct core_ev *e)
 {
 	struct led *led = (struct led *)me;
 	switch(e->sig) {
-		case SIG_SWITCH_PRESSED:
+        case SIG_INIT: {
+
+        }
+            return HAND();
+        case SIG_ENTER: {
+            struct core_ev ev_switch = { .sig = SIG_SWITCH_PRESSED };
+            luna_ps_subscribe(&bus.ps, &ev_switch, &led->obj);
+        }
+            return HAND();
+        case SIG_EXIT: {
+            struct core_ev ev_switch = { .sig = SIG_SWITCH_PRESSED };
+            luna_ps_unsubscribe(&bus.ps, &ev_switch, &led->obj);
+        }
+            return HAND();
+		case SIG_SWITCH_PRESSED: {
 			printf("[LED%d] recv.\n", led->id);
-			return HAND();
+        }
+            return HAND();
 		default:
-			return IGNO();
+            return IGNO();
 	}
 }
 
@@ -77,6 +92,18 @@ static int switch_state(struct core_fsm *me, const struct core_ev *e)
 {
 	struct button *btn = (struct button *)me;
 	switch(e->sig) {
+        case SIG_INIT: {
+
+        }
+            return HAND();
+        case SIG_ENTER: {
+
+        }
+            return HAND();
+        case SIG_EXIT: {
+
+        }
+            return HAND();
 		case SIG_SWITCH_PRESSED: {
 			printf("[switch] pressed count = %d -> publish\n", ++btn->count);
 			struct core_ev *ev = luna_ev_new(sizeof(struct core_ev), SIG_SWITCH_PRESSED);
@@ -101,6 +128,9 @@ int key_A_pressed(void)
 int main(void)
 {
 	SetConsoleOutputCP(65001);
+	static uint8_t buf1[256];
+	static uint8_t buf2[256];
+	static uint8_t buf3[256];
 
     luna_obj_init();
 	luna_ev_bus_init(&bus);
@@ -110,22 +140,17 @@ int main(void)
 
 	// LED1
 	led1.obj.super.handler = led_state;
-	static uint8_t buf1[256];
 	luna_obj_add(&led1.obj, buf1, sizeof(buf1), 1);
 	led1.id = 1;
-	luna_ps_subscribe(&bus.ps, &ev_switch, &led1.obj);
 
 	// LED2
 	led2.obj.super.handler = led_state;
-	static uint8_t buf2[256];
 	luna_obj_add(&led2.obj, buf2, sizeof(buf2), 1);
 	led2.id = 2;
-	luna_ps_subscribe(&bus.ps, &ev_switch, &led2.obj);
 
 	// Button
 	button.obj.super.handler = switch_state;
-	static uint8_t buf_btn[256];
-	luna_obj_add(&button.obj, buf_btn, sizeof(buf_btn), 2);
+	luna_obj_add(&button.obj, buf3, sizeof(buf3), 2);
 
 	while (1) {
 		if (key_A_pressed()) {
