@@ -7,7 +7,9 @@
 #include "luna_fsm.h"
 #include "luna_dlist.h"
 
-#define LUNA_OBJ_CONFIG_MAX_PRIORITY    8
+#ifndef LUNA_OBJ_CONFIG_MAX_PRIORITY
+#define LUNA_OBJ_CONFIG_MAX_PRIORITY		(8)
+#endif
 
 struct core_obj {
 	struct core_fsm super;
