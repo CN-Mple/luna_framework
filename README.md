@@ -1,5 +1,6 @@
 # luna_framework
 ``` c
+/* main.c */
 #define LUNA_RC_IMPLEMENTATION
 #include "luna_rc.h"
 #undef LUNA_RC_IMPLEMENTATION
@@ -28,6 +29,10 @@
 #include "luna_slist.h"
 #undef LUNA_SLIST_IMPLEMENTATION
 
+#define LUNA_DLIST_IMPLEMENTATION
+#include "luna_dlist.h"
+#undef LUNA_DLIST_IMPLEMENTATION
+
 #define LUNA_EV_BUS_IMPLEMENTATION
 #include "luna_ev_bus.h"
 #undef LUNA_EV_BUS_IMPLEMENTATION
@@ -52,104 +57,82 @@ struct button {
 };
 
 struct core_ev_bus bus;
-
 struct led led1;
 struct led led2;
 struct button button;
-
 
 static int led_state(struct core_fsm *me, const struct core_ev *e)
 {
 	struct led *led = (struct led *)me;
 	switch(e->sig) {
-		case SIG_SWITCH_PRESSED: {
+		case SIG_SWITCH_PRESSED:
 			printf("[LED%d] recv.\n", led->id);
 			return HAND();
-		}
-		break;
 		default:
 			return IGNO();
-		break;
 	}
-	return IGNO();
 }
 
 static int switch_state(struct core_fsm *me, const struct core_ev *e)
 {
-	struct button *button = (struct button *)me;
+	struct button *btn = (struct button *)me;
 	switch(e->sig) {
-		case SIG_INIT: {
-		}
-		break;
 		case SIG_SWITCH_PRESSED: {
-			printf("[switch] pressed count = %d -> publish\n", ++button->count);
-			struct core_ev *ev_pressed = luna_ev_new(sizeof(struct core_ev), SIG_SWITCH_PRESSED);
-			luna_ps_publish(&bus.ps, ev_pressed);
+			printf("[switch] pressed count = %d -> publish\n", ++btn->count);
+			struct core_ev *ev = luna_ev_new(sizeof(struct core_ev), SIG_SWITCH_PRESSED);
+			luna_ps_publish(&bus.ps, ev);
+			return HAND();
 		}
-		break;
 		default:
 			return IGNO();
-		break;
-	}
-	return IGNO();
-}
-
-void obj_run(struct core_obj *obj)
-{
-	struct core_ev *e;
-	if (luna_rq_pop(&obj->mailbox, (uint8_t *)&e)) {
-		luna_fsm_dispatch(&obj->super, e);
-		luna_ev_gc(e);
 	}
 }
 
 int key_A_pressed(void)
 {
-	static int last_state = 0;
-	int now_state = (GetAsyncKeyState('A') & 0x8000) ? 1 : 0;
-	if (now_state && !last_state) {
-		last_state = now_state;
-		return 1;
-	}
-	last_state = now_state;
-	return 0;
+	static int last = 0;
+	int now = (GetAsyncKeyState('A') & 0x8000) ? 1 : 0;
+	int ret = 0;
+	if (now && !last) ret = 1;
+	last = now;
+	return ret;
 }
 
 int main(void)
 {
 	SetConsoleOutputCP(65001);
 
+    luna_obj_init();
 	luna_ev_bus_init(&bus);
-	struct core_ps *ps = &bus.ps;
-	struct core_ev ev_switch_pressed;
-	ev_switch_pressed.sig = SIG_SWITCH_PRESSED;
-	luna_ev_bus_ev_register(&bus, ev_switch_pressed);
 
+	struct core_ev ev_switch = { .sig = SIG_SWITCH_PRESSED };
+	luna_ev_bus_ev_register(&bus, ev_switch);
+
+	// LED1
 	led1.obj.super.handler = led_state;
 	static uint8_t buf1[256];
-	luna_obj_init(&led1.obj, buf1, sizeof(buf1));
+	luna_obj_add(&led1.obj, buf1, sizeof(buf1), 1);
 	led1.id = 1;
-	luna_ps_subscribe(ps, &ev_switch_pressed, &led1.obj);
+	luna_ps_subscribe(&bus.ps, &ev_switch, &led1.obj);
 
+	// LED2
 	led2.obj.super.handler = led_state;
 	static uint8_t buf2[256];
-	luna_obj_init(&led2.obj, buf2, sizeof(buf2));
+	luna_obj_add(&led2.obj, buf2, sizeof(buf2), 1);
 	led2.id = 2;
-	luna_ps_subscribe(ps, &ev_switch_pressed, &led2.obj);
+	luna_ps_subscribe(&bus.ps, &ev_switch, &led2.obj);
 
+	// Button
 	button.obj.super.handler = switch_state;
-	static uint8_t buf_switch[256];
-	luna_obj_init(&button.obj, buf_switch, sizeof(buf_switch));
+	static uint8_t buf_btn[256];
+	luna_obj_add(&button.obj, buf_btn, sizeof(buf_btn), 2);
 
 	while (1) {
 		if (key_A_pressed()) {
-			struct core_ev *trigger_ev = luna_ev_new(sizeof(struct core_ev), SIG_SWITCH_PRESSED);
-			luna_obj_ev_post(&button.obj, trigger_ev);
+			struct core_ev *ev = luna_ev_new(sizeof(struct core_ev), SIG_SWITCH_PRESSED);
+			luna_obj_ev_post(&button.obj, ev);
 		}
-
-		obj_run(&button.obj);
-		obj_run(&led1.obj);
-		obj_run(&led2.obj);
+		luna_obj_schedule();
 	}
 }
 
