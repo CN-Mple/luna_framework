@@ -1,41 +1,8 @@
 # luna_framework
 ``` c
 /* main.c */
-#define LUNA_RC_IMPLEMENTATION
-#include "luna_rc.h"
-#undef LUNA_RC_IMPLEMENTATION
-
-#define LUNA_EV_IMPLEMENTATION
-#include "luna_ev.h"
-#undef LUNA_EV_IMPLEMENTATION
-
-#define LUNA_FSM_IMPLEMENTATION
-#include "luna_fsm.h"
-#undef LUNA_FSM_IMPLEMENTATION
-
-#define LUNA_RQ_IMPLEMENTATION
-#include "luna_rq.h"
-#undef LUNA_RQ_IMPLEMENTATION
-
-#define LUNA_OBJ_IMPLEMENTATION
-#include "luna_obj.h"
-#undef LUNA_OBJ_IMPLEMENTATION
-
-#define LUNA_PS_IMPLEMENTATION
-#include "luna_ps.h"
-#undef LUNA_PS_IMPLEMENTATION
-
-#define LUNA_SLIST_IMPLEMENTATION
-#include "luna_slist.h"
-#undef LUNA_SLIST_IMPLEMENTATION
-
-#define LUNA_DLIST_IMPLEMENTATION
-#include "luna_dlist.h"
-#undef LUNA_DLIST_IMPLEMENTATION
-
-#define LUNA_EV_BUS_IMPLEMENTATION
-#include "luna_ev_bus.h"
-#undef LUNA_EV_BUS_IMPLEMENTATION
+#define LUNA_FRAMEWORK_IMPLEMENTATION
+#include "luna_framework.h"
 
 #include <stdio.h>
 #include <windows.h>
@@ -56,37 +23,16 @@ struct button {
 	int count;
 };
 
-struct core_ev_bus bus;
-struct led led1;
-struct led led2;
+#define LED_MAX_COUNT		(5)
+#define LED_BUFFER_SIZE		(256)
+
+#define BUTTON_BUFFER_SIZE	(256)
+
+struct led led[LED_MAX_COUNT];
+static uint8_t led_buffer[LED_MAX_COUNT][LED_BUFFER_SIZE];
+
 struct button button;
-
-static int led_state(struct core_fsm *me, const struct core_ev *e)
-{
-	struct led *led = (struct led *)me;
-	switch(e->sig) {
-        case SIG_INIT: {
-
-        }
-            return HAND();
-        case SIG_ENTER: {
-            struct core_ev ev_switch = { .sig = SIG_SWITCH_PRESSED };
-            luna_ps_subscribe(&bus.ps, &ev_switch, &led->obj);
-        }
-            return HAND();
-        case SIG_EXIT: {
-            struct core_ev ev_switch = { .sig = SIG_SWITCH_PRESSED };
-            luna_ps_unsubscribe(&bus.ps, &ev_switch, &led->obj);
-        }
-            return HAND();
-		case SIG_SWITCH_PRESSED: {
-			printf("[LED%d] recv.\n", led->id);
-        }
-            return HAND();
-		default:
-            return IGNO();
-	}
-}
+static uint8_t button_buffer[BUTTON_BUFFER_SIZE];
 
 static int switch_state(struct core_fsm *me, const struct core_ev *e)
 {
@@ -115,7 +61,34 @@ static int switch_state(struct core_fsm *me, const struct core_ev *e)
 	}
 }
 
-int key_A_pressed(void)
+static int led_state(struct core_fsm *me, const struct core_ev *e)
+{
+	struct led *led = (struct led *)me;
+	switch(e->sig) {
+        case SIG_INIT: {
+
+        }
+            return HAND();
+        case SIG_ENTER: {
+            struct core_ev ev_switch = { .sig = SIG_SWITCH_PRESSED };
+            luna_ps_subscribe(luna_framework_get_ps(), &ev_switch, &led->obj);
+        }
+            return HAND();
+        case SIG_EXIT: {
+            struct core_ev ev_switch = { .sig = SIG_SWITCH_PRESSED };
+            luna_ps_unsubscribe(luna_framework_get_ps(), &ev_switch, &led->obj);
+        }
+            return HAND();
+		case SIG_SWITCH_PRESSED: {
+			printf("[LED%d] recv.\n", led->id);
+        }
+            return HAND();
+		default:
+            return IGNO();
+	}
+}
+
+static int key_A_pressed(void)
 {
 	static int last = 0;
 	int now = (GetAsyncKeyState('A') & 0x8000) ? 1 : 0;
@@ -125,39 +98,34 @@ int key_A_pressed(void)
 	return ret;
 }
 
+static void user_init(void)
+{
+	for (size_t i = 0; i < LED_MAX_COUNT; ++i) {
+		led[i].obj.super.handler = led_state;
+		luna_obj_add(&led[i].obj, &led_buffer[i][0], LED_BUFFER_SIZE, 1);
+		led[i].id = i;
+	}
+
+	button.obj.super.handler = switch_state;
+	luna_obj_add(&button.obj, button_buffer, BUTTON_BUFFER_SIZE, 2);
+}
+
 int main(void)
 {
 	SetConsoleOutputCP(65001);
-	static uint8_t buf1[256];
-	static uint8_t buf2[256];
-	static uint8_t buf3[256];
-
-    luna_obj_init();
-	luna_ev_bus_init(&bus);
+	luna_framework_init();
 
 	struct core_ev ev_switch = { .sig = SIG_SWITCH_PRESSED };
 	luna_ev_bus_ev_register(&bus, ev_switch);
 
-	// LED1
-	led1.obj.super.handler = led_state;
-	luna_obj_add(&led1.obj, buf1, sizeof(buf1), 1);
-	led1.id = 1;
-
-	// LED2
-	led2.obj.super.handler = led_state;
-	luna_obj_add(&led2.obj, buf2, sizeof(buf2), 1);
-	led2.id = 2;
-
-	// Button
-	button.obj.super.handler = switch_state;
-	luna_obj_add(&button.obj, buf3, sizeof(buf3), 2);
+	user_init();
 
 	while (1) {
 		if (key_A_pressed()) {
 			struct core_ev *ev = luna_ev_new(sizeof(struct core_ev), SIG_SWITCH_PRESSED);
 			luna_obj_ev_post(&button.obj, ev);
 		}
-		luna_obj_schedule();
+		luna_framework_run();
 	}
 }
 
