@@ -13,6 +13,7 @@
 #include "luna_ps.h"
 #include "luna_ev_bus.h"
 
+struct core_ev_bus *luna_framework_get_bus(void);
 struct core_ps *luna_framework_get_ps(void);
 
 void luna_framework_init(void);
@@ -59,6 +60,11 @@ void luna_framework_run(void);
 #undef LUNA_EV_BUS_IMPLEMENTATION
 
 static struct core_ev_bus bus;
+
+struct core_ev_bus *luna_framework_get_bus(void)
+{
+	return &bus;
+}
 
 struct core_ps *luna_framework_get_ps(void)
 {
