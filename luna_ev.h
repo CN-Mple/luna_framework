@@ -9,7 +9,7 @@ struct core_ev {
 	core_sig_t sig;
 };
 
-struct core_ev *luna_ev_new(size_t size, core_sig_t sig);
+struct core_ev *luna_ev_new(size_t size, core_sig_t sig,  void (*destroy)(void*));
 void luna_ev_ref(struct core_ev *ev);
 void luna_ev_gc(struct core_ev *ev);
 
@@ -17,14 +17,9 @@ void luna_ev_gc(struct core_ev *ev);
 
 #ifdef LUNA_EV_IMPLEMENTATION
 
-static void luna_ev_destroy(void *data)
+struct core_ev *luna_ev_new(size_t size, core_sig_t sig, void (*destroy)(void*))
 {
-	(void)data;
-}
-
-struct core_ev *luna_ev_new(size_t size, core_sig_t sig)
-{
-	struct core_ev *ev = luna_rc_alloc(size, luna_ev_destroy);
+	struct core_ev *ev = luna_rc_alloc(size, destroy);
 	ev->sig = sig;
 	return ev;
 }
